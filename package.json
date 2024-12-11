@@ -1,6 +1,6 @@
 {
   "name": "create-next-shadcn-pwa",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Create Next.js apps with PWA, Shadcn, and more features out of the box",
   "bin": {
