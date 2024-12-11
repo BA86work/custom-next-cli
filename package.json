@@ -1,15 +1,36 @@
 {
-  "name": "create-custom-next-cli",
+  "name": "create-next-shadcn-pwa",
   "version": "1.0.0",
   "type": "module",
+  "description": "Create Next.js apps with PWA, Shadcn, and more features out of the box",
   "bin": {
-    "create-custom-next-cli": "./dist/index.js"
+    "create-next-shadcn-pwa": "./dist/cli.js"
   },
+  "files": [
+    "dist"
+  ],
+  "template": {
+    "name": "create-next-shadcn-pwa",
+    "description": "Next.js starter template with PWA, Shadcn UI, and more features",
+    "type": "app"
+  },
+  "keywords": [
+    "create-next-app",
+    "next.js",
+    "pwa",
+    "shadcn",
+    "tailwind",
+    "starter",
+    "template",
+    "create"
+  ],
+  "author": "BA86work",
+  "license": "MIT",
   "dependencies": {
     "@types/boxen": "^3.0.5",
     "boxen": "^8.0.1",
+    "cac": "^6.7.14",
     "chalk": "^5.3.0",
-    "commander": "^11.0.0",
     "degit": "^2.8.4",
     "ora": "^7.0.1",
     "prompts": "^2.4.2"
@@ -25,9 +46,18 @@
   "scripts": {
     "build": "tsx build.ts",
     "dev": "tsx index.ts",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "prepublishOnly": "npm run build"
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BA86work/next-starter-shadcn-pwa.git"
+  },
+  "bugs": {
+    "url": "https://github.com/BA86work/next-starter-shadcn-pwa/issues"
+  },
+  "homepage": "https://github.com/BA86work/next-starter-shadcn-pwa#readme"
 }
