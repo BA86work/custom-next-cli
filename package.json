@@ -1,0 +1,33 @@
+{
+  "name": "create-custom-next-cli",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "create-custom-next-cli": "./dist/index.js"
+  },
+  "dependencies": {
+    "@types/boxen": "^3.0.5",
+    "boxen": "^8.0.1",
+    "chalk": "^5.3.0",
+    "commander": "^11.0.0",
+    "degit": "^2.8.4",
+    "ora": "^7.0.1",
+    "prompts": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/prompts": "^2.4.2",
+    "typescript": "^5",
+    "tsx": "^4.7.0",
+    "@types/degit": "^2.8.6",
+    "esbuild": "^0.19.11"
+  },
+  "scripts": {
+    "build": "tsx build.ts",
+    "dev": "tsx index.ts",
+    "start": "node dist/index.js"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
