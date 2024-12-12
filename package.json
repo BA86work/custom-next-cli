@@ -94,7 +94,9 @@
     "build": "tsx build.ts",
     "dev": "tsx index.ts",
     "start": "node dist/index.js",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test": "bun test",
+    "clean-cache": "node scripts/clean-cache.js"
   },
   "publishConfig": {
     "access": "public"
@@ -106,5 +108,13 @@
   "bugs": {
     "url": "https://github.com/BA86work/next-starter-shadcn-pwa/issues"
   },
-  "homepage": "https://github.com/BA86work/next-starter-shadcn-pwa#readme"
+  "homepage": "https://github.com/BA86work/next-starter-shadcn-pwa#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ]
 }
