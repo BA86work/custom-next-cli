@@ -3,10 +3,15 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, cpSync, rmSync } fr
 import { join } from 'path';
 import { homedir } from 'os';
 
+export interface DependencyValidationResult {
+  isValid: boolean;
+  errors: string[];
+}
+
 export class TemplateManager {
   private cacheDir: string;
   private cacheFile: string;
-  private cacheMaxAge = 24 * 60 * 60 * 1000; // 24 hours
+  private cacheMaxAge = 24 * 60 * 60 * 1000;
   private isWindows = process.platform === 'win32';
 
   constructor() {
@@ -16,15 +21,39 @@ export class TemplateManager {
   }
 
   private ensureCacheDir() {
-    if (!existsSync(this.cacheDir)) {
-      mkdirSync(this.cacheDir, { recursive: true });
+    try {
+      if (!existsSync(this.cacheDir)) {
+        mkdirSync(this.cacheDir, { recursive: true });
+      }
+    } catch (error: any) {
+      throw new Error(`Failed to create cache directory: ${error?.message || 'Unknown error'}`);
     }
   }
 
   private cleanDirectory(dir: string) {
-    if (existsSync(dir)) {
-      rmSync(dir, { recursive: true, force: true });
+    try {
+      if (existsSync(dir)) {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    } catch (error: any) {
+      throw new Error(`Failed to clean directory ${dir}: ${error?.message || 'Unknown error'}`);
     }
+  }
+
+  async validateDependencies(dependencies: Record<string, string>): Promise<DependencyValidationResult> {
+    const result: DependencyValidationResult = { isValid: true, errors: [] };
+    
+    for (const [name, version] of Object.entries(dependencies)) {
+      try {
+        const cmd = `npm view ${name}@${version} version`;
+        execSync(cmd, { stdio: 'pipe' });
+      } catch (error) {
+        result.isValid = false;
+        result.errors.push(`Invalid dependency: ${name}@${version}`);
+      }
+    }
+
+    return result;
   }
 
   async validateVersion(version: string): Promise<string> {
@@ -41,8 +70,8 @@ export class TemplateManager {
         encoding: 'utf-8' 
       });
       return npmCheck.trim();
-    } catch (error) {
-      throw new Error(`Version ${version} not found`);
+    } catch (error: any) {
+      throw new Error(`Next.js version ${version} not found: ${error?.message || 'Unknown error'}`);
     }
   }
 
@@ -62,7 +91,8 @@ export class TemplateManager {
       if (!existsSync(tempDir)) return null;
 
       return tempDir;
-    } catch (error) {
+    } catch (error: any) {
+      console.warn(`Cache read failed: ${error?.message || 'Unknown error'}`);
       return null;
     }
   }
@@ -71,6 +101,12 @@ export class TemplateManager {
     try {
       if (!existsSync(tempDir)) {
         throw new Error(`Source template directory not found: ${tempDir}`);
+      }
+
+      // Validate dependencies before caching
+      const validationResult = await this.validateDependencies(dependencies);
+      if (!validationResult.isValid) {
+        throw new Error(`Invalid dependencies found:\n${validationResult.errors.join('\n')}`);
       }
 
       const cache = {
@@ -97,20 +133,24 @@ export class TemplateManager {
           force: true,
           errorOnExist: false
         });
-      } catch (copyError) {
+      } catch (copyError: any) {
         // Fallback to command line copy if native copy fails
         const copyCmd = this.isWindows
           ? `xcopy /E /I /Y /Q "${tempDir}" "${cacheTempDir}"`
           : `cp -rf "${tempDir}/." "${cacheTempDir}"`;
         
-        execSync(copyCmd, {
-          stdio: 'pipe',
-          shell: this.isWindows ? 'cmd.exe' : '/bin/sh'
-        });
+        try {
+          execSync(copyCmd, {
+            stdio: 'pipe',
+            shell: this.isWindows ? 'cmd.exe' : '/bin/sh'
+          });
+        } catch (cmdError: any) {
+          throw new Error(`Failed to copy template: ${cmdError?.message || 'Unknown error'}`);
+        }
       }
-    } catch (error) {
-      console.error('Failed to cache template:', error);
-      throw error; // Re-throw to handle in the calling code
+    } catch (error: any) {
+      console.error('Failed to cache template:', error?.message || 'Unknown error');
+      throw error;
     }
   }
 
@@ -118,7 +158,8 @@ export class TemplateManager {
     try {
       const nodeVersion = process.version;
       return nodeVersion.replace('v', '');
-    } catch (error) {
+    } catch (error: any) {
+      console.warn(`Failed to get Node version: ${error?.message || 'Unknown error'}`);
       return '18.x';
     }
   }

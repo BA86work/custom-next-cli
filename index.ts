@@ -1,16 +1,14 @@
 #!/usr/bin/env node
 import prompts from "prompts";
-import degit from "degit";
 import ora from "ora";
 import chalk from "chalk";
 import boxen from "boxen";
-// import gradient from "gradient-string";
 import { execSync } from "child_process";
 import type { ExecSyncOptions } from "child_process";
 import cac from 'cac'
 import { join } from 'path';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
-import { homedir } from 'os';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
+import { TemplateManager } from './src/templateManager';
 
 interface CliOptions {
   template?: string;
@@ -40,105 +38,6 @@ interface CacheConfig {
   lastUpdated: number;
   templateVersion: string;
   dependencies: Record<string, string>;
-}
-
-class TemplateManager {
-  private cacheDir: string;
-  private cacheFile: string;
-  private cacheMaxAge = 24 * 60 * 60 * 1000; // 24 hours
-
-  constructor() {
-    this.cacheDir = join(homedir(), '.create-next-shadcn-pwa');
-    this.cacheFile = join(this.cacheDir, 'cache.json');
-    this.ensureCacheDir();
-  }
-
-  private ensureCacheDir() {
-    if (!existsSync(this.cacheDir)) {
-      mkdirSync(this.cacheDir, { recursive: true });
-    }
-  }
-
-  async validateVersion(version: string): Promise<string> {
-    if (version === 'latest') return version;
-    
-    // Validate semver format
-    const semverRegex = /^(\d+\.\d+\.\d+)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$/;
-    if (!semverRegex.test(version)) {
-      throw new Error('Invalid version format. Use semver (e.g., 13.4.0) or "latest"');
-    }
-
-    try {
-      // Check if version exists in npm
-      const npmCheck = execSync(`npm view next@${version} version`, { 
-        stdio: ['pipe', 'pipe', 'pipe'],
-        encoding: 'utf-8' 
-      });
-      return npmCheck.trim();
-    } catch (error) {
-      throw new Error(`Version ${version} not found`);
-    }
-  }
-
-  async getCachedTemplate(): Promise<string | null> {
-    try {
-      if (!existsSync(this.cacheFile)) return null;
-
-      const cache: CacheConfig = JSON.parse(
-        readFileSync(this.cacheFile, 'utf-8')
-      );
-
-      if (Date.now() - cache.lastUpdated > this.cacheMaxAge) {
-        return null;
-      }
-
-      const tempDir = join(this.cacheDir, 'template');
-      if (!existsSync(tempDir)) return null;
-
-      return tempDir;
-    } catch (error) {
-      return null;
-    }
-  }
-
-  async cacheTemplate(tempDir: string, dependencies: Record<string, string>) {
-    try {
-      const cache: CacheConfig = {
-        lastUpdated: Date.now(),
-        templateVersion: '1.0.0', // Update this based on your template versioning
-        dependencies
-      };
-
-      writeFileSync(this.cacheFile, JSON.stringify(cache, null, 2));
-      
-      // Copy template to cache directory
-      const cacheTempDir = join(this.cacheDir, 'template');
-      execSync(getCleanupCommand(cacheTempDir));
-      execSync(`${isWindows ? 'xcopy /E /I /Y' : 'cp -r'} "${tempDir}" "${cacheTempDir}"`);
-    } catch (error) {
-      console.warn('Failed to cache template:', error);
-    }
-  }
-
-  async getCurrentNodeVersion(): Promise<string> {
-    try {
-      const nodeVersion = process.version;
-      return nodeVersion.replace('v', '');
-    } catch (error) {
-      return '18.x'; // fallback to LTS
-    }
-  }
-
-  async validateNodeVersion(version: string): Promise<string> {
-    if (version === 'current') {
-      return this.getCurrentNodeVersion();
-    }
-    const nodeVersionRegex = /^(\d+)(?:\.(?:x|\d+)(?:\.(?:x|\d+))?)?$/;
-    if (!nodeVersionRegex.test(version)) {
-      throw new Error('Invalid Node.js version format. Use: 18.x, 18, or 18.17.0');
-    }
-    return version;
-  }
 }
 
 declare module "degit" {
@@ -348,40 +247,70 @@ repo: ${chalk.blueBright("https://github.com/BA86work/next-starter-shadcn-pwa")}
               // Clean up any existing temp directory
               execSync(getCleanupCommand(tempDir), getExecOptions());
               
-              // Clone with proper error handling
+              // Clone with progress
+              spinner.text = "📥 Cloning template repository...";
               try {
-                execSync(
-                  `git clone --depth 1 https://github.com/BA86work/next-starter-shadcn-pwa.git ${tempDir}`,
-                  { ...getExecOptions(), stdio: 'pipe' }
+                const cloneProcess = execSync(
+                  `git clone --depth 1 --progress https://github.com/BA86work/next-starter-shadcn-pwa.git ${tempDir}`,
+                  { 
+                    ...getExecOptions(), 
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                    encoding: 'utf8'
+                  }
                 );
+                
+                spinner.succeed("✅ Template cloned successfully");
               } catch (cloneError: any) {
+                spinner.fail("❌ Failed to clone template");
                 throw new Error(`Failed to clone template repository: ${cloneError?.message || 'Unknown error'}`);
               }
             }
 
             const templateDir = cachedTemplate || tempDir;
 
-            // Read template's package.json
+            // Read and validate template's package.json
             const packageJsonPath = join(templateDir, 'package.json');
             if (!existsSync(packageJsonPath)) {
               throw new Error('Template package.json not found');
             }
 
-            const templatePackageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
-            
-            if (templatePackageJson && templatePackageJson.dependencies) {
-              // Get additional dependencies that aren't in the new project
-              const additionalDeps = Object.entries(templatePackageJson.dependencies)
-                .filter(([name]) => !['react', 'react-dom', 'next'].includes(name))
-                .map(([name, version]) => `${name}@${version}`);
+            let templatePackageJson;
+            try {
+              templatePackageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
+            } catch (parseError: any) {
+              throw new Error(`Failed to parse template package.json: ${parseError?.message || 'Unknown error'}`);
+            }
 
-              if (additionalDeps.length > 0) {
-                // Install additional dependencies
-                spinner.text = "📦 Installing template dependencies...";
-                execSync(`cd ${response.projectName} && bun add ${additionalDeps.join(' ')}`, getExecOptions());
+            if (!templatePackageJson || !templatePackageJson.dependencies) {
+              throw new Error('Invalid template package.json structure');
+            }
+
+            // Validate dependencies before installation
+            spinner.text = "🔍 Validating dependencies...";
+            const validationResult = await templateManager.validateDependencies(templatePackageJson.dependencies);
+            if (!validationResult.isValid) {
+              spinner.fail("❌ Dependency validation failed");
+              console.error("Invalid dependencies found:");
+              validationResult.errors.forEach((error: string) => console.error(`- ${error}`));
+              throw new Error('Dependency validation failed');
+            }
+            spinner.succeed("✅ Dependencies validated");
+
+            // Install dependencies
+            if (Object.keys(templatePackageJson.dependencies).length > 0) {
+              spinner.text = "📦 Installing template dependencies...";
+              try {
+                execSync(`cd ${response.projectName} && bun add ${Object.entries(templatePackageJson.dependencies)
+                  .filter(([name]) => !['react', 'react-dom', 'next'].includes(name))
+                  .map(([name, version]) => `${name}@${version}`)
+                  .join(' ')}`, 
+                  getExecOptions()
+                );
+                spinner.succeed("✅ Dependencies installed");
+              } catch (installError: any) {
+                spinner.fail("❌ Failed to install dependencies");
+                throw new Error(`Failed to install dependencies: ${installError?.message || 'Unknown error'}`);
               }
-            } else {
-              throw new Error('Invalid package.json structure');
             }
 
             // Copy required files and directories
@@ -423,13 +352,19 @@ repo: ${chalk.blueBright("https://github.com/BA86work/next-starter-shadcn-pwa")}
                 if (!existsSync(publicDir)) {
                   mkdirSync(publicDir, { recursive: true });
                 }
-                const manifestSource = join(templateDir, 'public', 'manifest.json');
-                const manifestTarget = join(publicDir, 'manifest.json');
-                if (existsSync(manifestSource)) {
-                  execSync(`${isWindows ? `copy /Y "${manifestSource}" "${manifestTarget}"` : `cp "${manifestSource}" "${manifestTarget}"`}`, getExecOptions());
+
+                // Copy ทั้ง directory แทนที่จะ copy แค่ manifest.json
+                const publicSource = join(templateDir, 'public');
+                if (existsSync(publicSource)) {
+                  execSync(
+                    `${isWindows 
+                      ? `xcopy /E /I /Y "${publicSource}" "${publicDir}"`
+                      : `cp -r "${publicSource}/." "${publicDir}"`}`,
+                    getExecOptions()
+                  );
                 }
               } catch (err) {
-                console.warn('Warning: Could not copy manifest.json');
+                console.warn('Warning: Could not copy public directory');
               }
             }
 
